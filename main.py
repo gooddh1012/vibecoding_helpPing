@@ -40,7 +40,7 @@ mongo_collection = mongo_db[
     os.getenv("MONGO_COLLECTION")
 ]
 
-print("MongoDB 연결 완료")
+print("MongoDB 연결 완료", flush=True)
 
 ###################################
 # index 생성
@@ -71,6 +71,8 @@ def load_prompt(name):
 
 def read_pdf(path):
 
+    print("PDF 읽는 중...", flush=True)
+
     text = ""
 
     with pdfplumber.open(path) as pdf:
@@ -91,6 +93,8 @@ def read_pdf(path):
 
 def split_text(text, max_length=8000):
 
+    print("텍스트 분할 중...", flush=True)
+
     chunks = []
 
     start = 0
@@ -104,6 +108,8 @@ def split_text(text, max_length=8000):
         )
 
         start = end
+
+    print(f"총 chunk 수: {len(chunks)}", flush=True)
 
     return chunks
 
@@ -139,6 +145,11 @@ def run_gpt(prompt):
 def save_topics(topics):
 
     for t in topics:
+
+        print(
+            f"저장 중: {t['topic']} (week {t['week']})",
+            flush=True
+        )
 
         mongo_collection.update_one(
 
@@ -183,7 +194,12 @@ def process_upload(file_path):
 
     all_topics = []
 
-    for chunk in chunks:
+    for i, chunk in enumerate(chunks):
+
+        print(
+            f"GPT 처리 중 {i+1}/{len(chunks)}",
+            flush=True
+        )
 
         prompt = template.replace(
             "{{TEXT}}",
@@ -200,6 +216,13 @@ def process_upload(file_path):
 
         all_topics.extend(topics)
 
+        print(
+            f"완료 {i+1}/{len(chunks)}",
+            flush=True
+        )
+
+    print("전체 완료", flush=True)
+
     return all_topics
 
 ###################################
@@ -208,25 +231,60 @@ def process_upload(file_path):
 
 def process_question(question):
 
+    # 질문에서 키워드 추출
     keyword = question.split()[0]
 
+    # MongoDB에서 topic 검색
     found = mongo_collection.find_one({
-
         "topic": {
             "$regex": keyword,
             "$options": "i"
         }
-
     })
 
-    if found:
+    # 찾지 못한 경우
+    if not found:
+        return {
+            "answer": "관련 내용을 찾지 못했습니다."
+        }
 
-        found["_id"] = str(found["_id"])
+    # GPT에 전달할 context 생성
+    context = f"""
+주제: {found['topic']}
+내용: {found['content']}
+주차: {found['week']}
+"""
 
-        return found
+    # GPT 프롬프트 생성
+    prompt = f"""
+다음 학습 정보를 참고하여 질문에 자연스럽게 답하라.
 
+정보:
+{context}
+
+질문:
+{question}
+
+답변은 사람이 말하듯 자연스럽게 작성하라.
+"""
+
+    # GPT 호출
+    response = client.chat.completions.create(
+        model="gpt-4.1",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    )
+
+    # GPT 답변 추출
+    answer = response.choices[0].message.content
+
+    # 결과 반환
     return {
-        "message": "기록 없음"
+        "answer": answer
     }
 
 ###################################
@@ -235,8 +293,9 @@ def process_question(question):
 
 def process_summary():
 
-    docs =
-    list(mongo_collection.find())
+    print("summary 생성 중...", flush=True)
+
+    docs = list(mongo_collection.find())
 
     text = ""
 
@@ -252,7 +311,12 @@ def process_summary():
 
     summaries = []
 
-    for chunk in chunks:
+    for i, chunk in enumerate(chunks):
+
+        print(
+            f"summary GPT {i+1}/{len(chunks)}",
+            flush=True
+        )
 
         prompt = template.replace(
             "{{TEXT}}",
@@ -269,32 +333,38 @@ def process_summary():
 # MAIN
 ###################################
 
-mode = sys.argv[1]
+try:
 
-if mode == "upload":
+    mode = sys.argv[1]
 
-    file_path = sys.argv[2]
+    if mode == "upload":
 
-    topics = process_upload(
-        file_path
-    )
+        file_path = sys.argv[2]
 
-    print(json.dumps({
-        "topics": topics
-    }))
+        topics = process_upload(
+            file_path
+        )
 
-elif mode == "question":
+        print(json.dumps({
+            "topics": topics
+        }))
 
-    question = sys.argv[2]
+    elif mode == "question":
 
-    result = process_question(
-        question
-    )
+        question = sys.argv[2]
 
-    print(json.dumps(result))
+        result = process_question(
+            question
+        )
 
-elif mode == "summary":
+        print(json.dumps(result, ensure_ascii=False))
 
-    result = process_summary()
+    elif mode == "summary":
 
-    print(result)
+        result = process_summary()
+
+        print(result)
+
+except Exception as e:
+
+    print("ERROR:", str(e), flush=True)
