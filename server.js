@@ -51,7 +51,7 @@ function runPython(args, res) {
   let result = "";
 
   python.stdout.on("data", data => {
-    result += data.toString();
+    result += data.toString("utf8");
   });
 
   python.stderr.on("data", data => {

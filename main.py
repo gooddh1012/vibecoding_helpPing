@@ -1,7 +1,8 @@
 import sys
 import json
 import os
-
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import pdfplumber
 
 from dotenv import load_dotenv
@@ -183,79 +184,57 @@ def save_topics(topics):
 ###################################
 
 def process_upload(file_path):
-
+    # PDF 전체 텍스트 읽기
     text = read_pdf(file_path)
 
-    chunks = split_text(text)
+    # PDF 전체 내용을 그대로 저장할 week와 topics 추출
+    # 예시: GPT로 주제만 뽑기
+    template = load_prompt("text_prompt.txt")
+    prompt = template.replace("{{TEXT}}", text)
+    
+    result = run_gpt(prompt)
+    parsed = json.loads(result)
 
-    template = load_prompt(
-        "text_prompt.txt"
+    topics = parsed["topics"]  # ["프로시저", "사용자 정의 함수", ...]
+
+    # MongoDB에 전체 PDF 저장
+    mongo_collection.update_one(
+        {"file_name": os.path.basename(file_path)},
+        {"$set": {
+            "week": 13,                  # 예시로 week 13
+            "topics": [t["topic"] for t in topics],
+            "content": text,             # PDF 전체 내용 통째로
+            "date": datetime.now().strftime("%Y-%m-%d")
+        }},
+        upsert=True
     )
 
-    all_topics = []
-
-    for i, chunk in enumerate(chunks):
-
-        print(
-            f"GPT 처리 중 {i+1}/{len(chunks)}",
-            flush=True
-        )
-
-        prompt = template.replace(
-            "{{TEXT}}",
-            chunk
-        )
-
-        result = run_gpt(prompt)
-
-        parsed = json.loads(result)
-
-        topics = parsed["topics"]
-
-        save_topics(topics)
-
-        all_topics.extend(topics)
-
-        print(
-            f"완료 {i+1}/{len(chunks)}",
-            flush=True
-        )
-
-    print("전체 완료", flush=True)
-
-    return all_topics
+    print("전체 PDF와 topics 저장 완료", flush=True)
+    return topics
 
 ###################################
 # question
 ###################################
 
 def process_question(question):
+    keyword = question.split()[0]  # 예: "프로시저"
 
-    # 질문에서 키워드 추출
-    keyword = question.split()[0]
-
-    # MongoDB에서 topic 검색
+    # MongoDB에서 topics 배열 안 검색
     found = mongo_collection.find_one({
-        "topic": {
-            "$regex": keyword,
-            "$options": "i"
+        "topics": {
+            "$elemMatch": {"$regex": keyword, "$options": "i"}
         }
     })
 
-    # 찾지 못한 경우
     if not found:
-        return {
-            "answer": "관련 내용을 찾지 못했습니다."
-        }
+        return {"answer": "관련 내용을 찾지 못했습니다."}
 
-    # GPT에 전달할 context 생성
     context = f"""
-주제: {found['topic']}
+주제: {', '.join(found['topics'])}
 내용: {found['content']}
 주차: {found['week']}
 """
 
-    # GPT 프롬프트 생성
     prompt = f"""
 다음 학습 정보를 참고하여 질문에 자연스럽게 답하라.
 
@@ -268,24 +247,14 @@ def process_question(question):
 답변은 사람이 말하듯 자연스럽게 작성하라.
 """
 
-    # GPT 호출
     response = client.chat.completions.create(
         model="gpt-4.1",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
+        messages=[{"role": "user", "content": prompt}]
     )
 
-    # GPT 답변 추출
     answer = response.choices[0].message.content
 
-    # 결과 반환
-    return {
-        "answer": answer
-    }
+    return {"answer": answer}
 
 ###################################
 # summary
