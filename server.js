@@ -10,14 +10,18 @@ const PORT = process.env.PORT || 3000;
 
 app.use(morgan("dev"));
 app.use(express.json());
+
+app.get("/", (req, res) => {
+  res.sendFile(__dirname + "/public/select.html");
+});
+
 app.use(express.static("public"));
+
 
 /////////////////////////////////
 // MongoDB 연결
 /////////////////////////////////
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB 연결 성공"))
-  .catch(err => console.error("❌ MongoDB 연결 실패:", err));
+mongoose.connect(process.env.MONGO_URI).then(() => console.log("MongoDB 연결 성공")).catch(err => console.error("❌ MongoDB 연결 실패:", err));
 
 /////////////////////////////////
 // Multer 설정
@@ -48,6 +52,7 @@ app.get("/status", (req, res) => {
 /////////////////////////////////
 function runPython(args, res) {
   const python = spawn("python", args);
+
   let result = "";
 
   python.stdout.on("data", data => {
@@ -55,20 +60,40 @@ function runPython(args, res) {
   });
 
   python.stderr.on("data", data => {
-    console.error("Python Error:", data.toString());
+    console.error("Python stderr:", data.toString());
   });
 
   python.on("close", () => {
     try {
-      // Python에서 ensure_ascii=False로 출력하면 한글 그대로 JSON 파싱 가능
-      const parsed = JSON.parse(result);
 
-      // ★ 여기서 UTF-8 명시
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      // 🔥 JSON 시작 위치 찾기
+      const jsonStart = result.indexOf("{");
+
+      if (jsonStart === -1) {
+        throw new Error("JSON 없음");
+      }
+
+      const jsonString = result.slice(jsonStart);
+
+      const parsed = JSON.parse(jsonString);
+
+      res.setHeader(
+        "Content-Type",
+        "application/json; charset=utf-8"
+      );
+
       res.json(parsed);
-    } catch {
-      // JSON 파싱 실패 시 원본 출력
-      res.send(result);
+
+    } catch (err) {
+
+      console.error("JSON 파싱 실패:");
+      console.error(result);
+
+      res.status(500).json({
+        error: "Python output parse 실패",
+        raw: result
+      });
+
     }
   });
 }

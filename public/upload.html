@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+
+    <form id="uploadForm">
+        <input type="file" 
+                name="pdf" 
+                accept=".pdf"
+                required>
+    </form>
+    <br></br>
+    <button type="submit">
+        업로드
+    </button>
+    <br></br>
+    <button onclick="location.href ='select.html'"> 선택화면으로 돌아가기</button>
+    <script>
+        document.getElementById("uploadForm").onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            await fetch("/upload",{method : "POST",body:formData});
+            
+        }
+    </script>
+</body>
+</html>

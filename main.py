@@ -38,10 +38,9 @@ mongo_db = mongo_client[
 ]
 
 mongo_collection = mongo_db[
-    os.getenv("MONGO_COLLECTION")
+    os.getenv("MONGO_COLLECTION") 
 ]
 
-print("MongoDB 연결 완료", flush=True)
 
 ###################################
 # index 생성
@@ -161,7 +160,7 @@ def save_topics(topics):
 
             {
                 "$set": {
-
+                    
                     "topic": t["topic"],
 
                     "content": t["content"],
@@ -230,22 +229,24 @@ def process_question(question):
         return {"answer": "관련 내용을 찾지 못했습니다."}
 
     context = f"""
-주제: {', '.join(found['topics'])}
-내용: {found['content']}
-주차: {found['week']}
-"""
+        주제: {', '.join(found['topics'])}
+        내용: {found['content']}
+        주차: {found['week']}
+        """
 
     prompt = f"""
-다음 학습 정보를 참고하여 질문에 자연스럽게 답하라.
+        다음 학습 정보를 참고하여 질문에 자연스럽게 답하라.
 
-정보:
-{context}
+        정보:
+        {context}
 
-질문:
-{question}
+        질문:
+        {question}
 
-답변은 사람이 말하듯 자연스럽게 작성하라.
-"""
+        답변은 사람이 말하듯 자연스럽게 작성하라.
+        또한 주차가 없으면 없다고 말하고 추측은 하지 않고 정보에 기반한 사실만을 토대로 말을 해
+        없는 내용이면 굳이 대답을 하지 않아도 괜찮아
+        """
 
     response = client.chat.completions.create(
         model="gpt-4.1",
@@ -255,48 +256,6 @@ def process_question(question):
     answer = response.choices[0].message.content
 
     return {"answer": answer}
-
-###################################
-# summary
-###################################
-
-def process_summary():
-
-    print("summary 생성 중...", flush=True)
-
-    docs = list(mongo_collection.find())
-
-    text = ""
-
-    for d in docs:
-
-        text += d["content"] + "\n"
-
-    chunks = split_text(text)
-
-    template = load_prompt(
-        "summary_prompt.txt"
-    )
-
-    summaries = []
-
-    for i, chunk in enumerate(chunks):
-
-        print(
-            f"summary GPT {i+1}/{len(chunks)}",
-            flush=True
-        )
-
-        prompt = template.replace(
-            "{{TEXT}}",
-            chunk
-        )
-
-        result = run_gpt(prompt)
-
-        summaries.append(result)
-
-    return "\n".join(summaries)
 
 ###################################
 # MAIN
