@@ -10,7 +10,8 @@ from openai import OpenAI
 
 from pymongo import MongoClient
 from datetime import datetime
-
+import sys
+print("현재 Python 경로:", sys.executable)
 ###################################
 # ENV 로드
 ###################################
