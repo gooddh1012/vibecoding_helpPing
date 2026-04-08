@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <style>
+        pre {
+            background: #eee;
+             padding: 15px;
+            }
+    </style>
+    <h2>질문</h2>
+    <input type="text"
+            id = "question"
+            placeholder="예 : 이진탐색 몇 주차에 배웠어? 요약해줘"
+            style="width: 300px"
+            >
+    <br></br>
+    <button onclick="ask()">질문하기</button>
+    <br></br>
+    <h2>답변</h2>
+    <pre id = "result">
+        이 곳에 답변이 표시됩니다.
+    </pre>
+    <br></br>
+
+
+    <button onclick="location.href ='select.html'"> 선택화면으로 돌아가기</button>
+    
+
+    <script>
+        async function ask(e) {
+
+            const question = document.getElementById("question").value;
+            const res = await fetch("/question",{method:"POST",
+                                                headers:{"Content-Type":"application/json"},
+                                                body:JSON.stringify({question})
+                                            });
+            const data = await res.json();
+            document.getElementById("result").textContent = data.answer;
+        }
+    </script>
+</body>
+</html>
