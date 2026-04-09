@@ -145,6 +145,31 @@
         처음이신가요? <a href="/signup.html">회원가입</a>
     </div>
 </div>
+    <script>
+        document.getElementById('loginForm').onsubmit = async (e) =>{
+            e.preventDefault();
+        
+            const logindata = {
+                email : document.getElementById('email').value,
+                password : document.getElementById('password').value
+            };
+            const res = await fetch("/login",{
+                method :"POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(logindata)
+            });
+            const result = await res.json();
+        
+            if(result.success){
+                alert("로그인 성공");
+                window.location.href="/select.html";
+            }
+            else{
+                alert("로그인 실패");
+            }
+        };
+
+    </script>
 
 </body>
 </html>
