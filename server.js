@@ -11,17 +11,40 @@ const PORT = process.env.PORT || 3000;
 app.use(morgan("dev"));
 app.use(express.json());
 
+/////////////////////////////////
+// 정적 파일
+/////////////////////////////////
 app.get("/", (req, res) => {
-  res.sendFile(__dirname + "/public/select.html");
+  res.sendFile(__dirname + "/public/login.html");
 });
 
 app.use(express.static("public"));
 
-
 /////////////////////////////////
 // MongoDB 연결
 /////////////////////////////////
-mongoose.connect(process.env.MONGO_URI).then(() => console.log("MongoDB 연결 성공")).catch(err => console.error("❌ MongoDB 연결 실패:", err));
+mongoose.connect(process.env.MONGO_URI + process.env.MONGO_DB)
+  .then(() => console.log("MongoDB 연결 성공"))
+  .catch(err => console.error("❌ MongoDB 연결 실패:", err));
+
+/////////////////////////////////
+// User 스키마 (회원가입용)
+/////////////////////////////////
+const userSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    required: true,
+    unique: true
+  },
+  password: {
+    type: String,
+    required: true
+  },
+  name: String,
+  studentId: String
+});
+
+const User = mongoose.model("User", userSchema);
 
 /////////////////////////////////
 // Multer 설정
@@ -31,6 +54,7 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) =>
     cb(null, Date.now() + "-" + file.originalname)
 });
+
 const upload = multer({ storage });
 
 /////////////////////////////////
@@ -40,17 +64,18 @@ app.get("/status", (req, res) => {
   res.json({
     message: "API 정상 작동 중",
     time: new Date().toISOString(),
-    mongodb: mongoose.connection.readyState === 1 ? "connected" : "disconnected"
+    mongodb:
+      mongoose.connection.readyState === 1
+        ? "connected"
+        : "disconnected"
   });
 });
 
 /////////////////////////////////
-// Python 실행 공통 함수
-/////////////////////////////////
-/////////////////////////////////
-// Python 실행 공통 함수
+// Python 실행 함수
 /////////////////////////////////
 function runPython(args, res) {
+
   const python = spawn("python", args);
 
   let result = "";
@@ -64,9 +89,9 @@ function runPython(args, res) {
   });
 
   python.on("close", () => {
+
     try {
 
-      // 🔥 JSON 시작 위치 찾기
       const jsonStart = result.indexOf("{");
 
       if (jsonStart === -1) {
@@ -95,34 +120,136 @@ function runPython(args, res) {
       });
 
     }
+
   });
+
 }
 
 /////////////////////////////////
-// 업로드
+// 회원가입 (MongoDB 저장)
 /////////////////////////////////
-app.post("/upload", upload.single("pdf"), (req, res) => {
-  console.log("업로드 파일:", req.file.path);
-  runPython(["main.py", "upload", req.file.path], res);
+app.post("/signup", async (req, res) => {
+
+  try {
+
+    const {
+      email,
+      password,
+      name,
+      studentId
+    } = req.body;
+
+    // 이메일 중복 확인
+    const exists = await User.findOne({ email });
+
+    if (exists) {
+
+      return res.json({
+        success: false,
+        message: "이미 존재하는 이메일입니다."
+      });
+
+    }
+
+    // 비밀번호 길이 최소 체크 (선택)
+    if (password.length < 8) {
+
+      return res.json({
+        success: false,
+        message: "비밀번호는 8자 이상 입력하세요."
+      });
+
+    }
+
+    // 새 유저 생성
+    const newUser = new User({
+      email,
+      password,
+      name,
+      studentId
+    });
+
+    await newUser.save();
+
+    console.log("회원가입 완료:", email);
+
+    res.json({
+      success: true
+    });
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      message: "회원가입 중 오류 발생"
+    });
+
+  }
+
 });
+
+/////////////////////////////////
+// 파일 업로드
+/////////////////////////////////
+app.post("/upload",
+  upload.single("pdf"),
+  (req, res) => {
+
+    console.log("업로드 파일:", req.file.path);
+
+    runPython(
+      ["main.py", "upload", req.file.path],
+      res
+    );
+
+  }
+);
 
 /////////////////////////////////
 // 질문
 /////////////////////////////////
 app.post("/question", (req, res) => {
-  runPython(["main.py", "question", req.body.question], res);
-});
 
-/////////////////////////////////
-// 전체 요약
-/////////////////////////////////
-app.get("/summary", (req, res) => {
-  runPython(["main.py", "summary"], res);
-});
+  runPython(
+    ["main.py", "question", req.body.question],
+    res
+  );
 
+});
+app.post("/login",async(req,res)=>{
+  try{
+    const{email,password} = req.body;
+    const user = await User.findOne({email});
+
+    if(!user){
+      return res.json({success : false,message:"아이디가 존재하지 않습니다"});
+    }
+    if(user.password !== password){
+      return res.json({success : false,message:"비밀번호가 존재하지 않습니다"})
+    }
+    res.json({
+      success: true
+    });
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      message: "로그인 중 오류 발생"
+    });
+  }
+});
 /////////////////////////////////
 // 서버 실행
 /////////////////////////////////
 app.listen(PORT, () => {
-  console.log(`Server started on http://localhost:${PORT}`);
+
+  console.log(
+    `Server started on http://localhost:${PORT}`
+  );
+
 });
