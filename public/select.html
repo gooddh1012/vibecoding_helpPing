@@ -1,13 +1,145 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>학습 관리 시스템 - 메뉴 선택</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+        }
+
+        body {
+            background-color: #f9f9f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: #333;
+        }
+
+        .select-container {
+            background-color: #ffffff;
+            padding: 40px;
+            width: 100%;
+            max-width: 500px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            text-align: center;
+        }
+
+        .select-header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #1a1a1a;
+        }
+
+        .select-header p {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 40px;
+        }
+
+        .menu-group {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .menu-card {
+            flex: 1;
+            padding: 30px 20px;
+            background-color: #ffffff;
+            border: 1.5px solid #eee;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .menu-card:hover {
+            border-color: #5b86e5;
+            background-color: #fbfcfe;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px rgba(91, 134, 229, 0.1);
+        }
+
+        .icon-circle {
+            width: 50px;
+            height: 50px;
+            background-color: #f0f4ff;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+            color: #5b86e5;
+            transition: background-color 0.3s;
+        }
+
+        .menu-card:hover .icon-circle {
+            background-color: #5b86e5;
+            color: white;
+        }
+
+        .menu-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .menu-desc {
+            font-size: 12px;
+            color: #999;
+            line-height: 1.4;
+        }
+
+        /* 하단 로그아웃 버튼 */
+        .logout-link {
+            margin-top: 40px;
+            display: inline-block;
+            font-size: 13px;
+            color: #bbb;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .logout-link:hover {
+            color: #ef4444; 
+        }
+    </style>
 </head>
 <body>
-        <button onclick="location.href = 'upload.html'">업로드</button>
-        <button onclick="location.href = 'question.html'">질문하기</button>
-       
+
+<div class="select-container">
+    <div class="select-header">
+        <h1>환영합니다!</h1>
+        <p>오늘의 학습 활동을 선택해 주세요.</p>
+    </div>
+
+    <div class="menu-group">
+        <div class="menu-card" onclick="location.href = 'upload.html'">
+            <div class="icon-circle">📄</div>
+            <div class="menu-title">업로드</div>
+            <div class="menu-desc">학습용 PDF 파일을<br>분석 시스템에 등록합니다.</div>
+        </div>
+
+        <div class="menu-card" onclick="location.href = 'question.html'">
+            <div class="icon-circle">💬</div>
+            <div class="menu-title">질문하기</div>
+            <div class="menu-desc">업로드된 내용을 바탕으로<br>AI에게 질문합니다.</div>
+        </div>
+    </div>
+
+    <a href="/" class="logout-link">로그아웃</a>
+</div>
+
 </body>
 </html>
