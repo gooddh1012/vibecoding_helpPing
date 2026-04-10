@@ -1,47 +1,213 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>학습 관리 시스템 - AI 질문하기</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+        }
+
+        body {
+            background-color: #f9f9f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .question-container {
+            background-color: #ffffff;
+            padding: 40px;
+            width: 100%;
+            max-width: 600px; /* 답변 내용을 고려해 조금 더 넓게 설정 */
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        .question-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .question-header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #1a1a1a;
+        }
+
+        .question-header p {
+            font-size: 14px;
+            color: #888;
+        }
+
+        .input-section {
+            margin-bottom: 30px;
+        }
+
+        .input-section label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #666;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1.5px solid #eee;
+            border-radius: 8px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus {
+            border-color: #5b86e5;
+        }
+
+        .ask-btn {
+            padding: 0 24px;
+            background-color: #5b86e5;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .ask-btn:hover {
+            background-color: #4a72d4;
+        }
+
+        .result-section {
+            margin-bottom: 30px;
+        }
+
+        .result-section h2 {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #5b86e5;
+        }
+
+        #result {
+            background-color: #f8faff;
+            border: 1px solid #eef2ff;
+            border-radius: 12px;
+            padding: 20px;
+            font-size: 15px;
+            line-height: 1.6;
+            color: #444;
+            white-space: pre-wrap; /* 줄바꿈 유지 */
+            word-break: break-all;
+            min-height: 100px;
+        }
+
+        .footer-nav {
+            text-align: center;
+            border-top: 1px solid #f5f5f5;
+            padding-top: 24px;
+        }
+
+        .back-btn {
+            background: none;
+            border: none;
+            color: #bbb;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: underline;
+            transition: color 0.2s;
+        }
+
+        .back-btn:hover {
+            color: #666;
+        }
+
+        .loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+    </style>
 </head>
 <body>
-    <style>
-        pre {
-            background: #eee;
-             padding: 15px;
-            }
-    </style>
-    <h2>질문</h2>
-    <input type="text"
-            id = "question"
-            placeholder="예 : 이진탐색 몇 주차에 배웠어? 요약해줘"
-            style="width: 300px"
-            >
-    <br></br>
-    <button onclick="ask()">질문하기</button>
-    <br></br>
-    <h2>답변</h2>
-    <pre id = "result">
-        이 곳에 답변이 표시됩니다.
-    </pre>
-    <br></br>
 
+<div class="question-container">
+    <div class="question-header">
+        <h1>AI 질문하기</h1>
+        <p>학습 내용에 대해 궁금한 점을 물어보세요.</p>
+    </div>
 
-    <button onclick="location.href ='select.html'"> 선택화면으로 돌아가기</button>
-    
+    <div class="input-section">
+        <label for="question">질문 입력</label>
+        <div class="input-group">
+            <input type="text" 
+                   id="question" 
+                   placeholder="예: 이진탐색은 몇 주차에 배웠어?"
+                   onkeyup="if(window.event.keyCode==13){ask()}">
+            <button class="ask-btn" onclick="ask()">질문하기</button>
+        </div>
+    </div>
 
-    <script>
-        async function ask(e) {
+    <div class="result-section">
+        <h2>답변 결과</h2>
+        <pre id="result">여기에 AI의 답변이 표시됩니다.</pre>
+    </div>
 
-            const question = document.getElementById("question").value;
-            const res = await fetch("/question",{method:"POST",
-                                                headers:{"Content-Type":"application/json"},
-                                                body:JSON.stringify({question})
-                                            });
-            const data = await res.json();
-            document.getElementById("result").textContent = data.answer;
+    <div class="footer-nav">
+        <button class="back-btn" onclick="location.href ='select.html'">선택 화면으로 돌아가기</button>
+    </div>
+</div>
+
+<script>
+    async function ask() {
+        const questionInput = document.getElementById("question");
+        const resultElement = document.getElementById("result");
+        const askBtn = document.querySelector(".ask-btn");
+
+        if (!questionInput.value.trim()) {
+            alert("질문을 입력해주세요.");
+            return;
         }
-    </script>
+
+        resultElement.textContent = "답변을 생성 중입니다...";
+        askBtn.disabled = true;
+        askBtn.textContent = "확인 중";
+
+        try {
+            const res = await fetch("/question", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ question: questionInput.value })
+            });
+            
+            const data = await res.json();
+            
+            resultElement.textContent = data.answer || "답변을 가져오지 못했습니다.";
+        } catch (error) {
+            console.error(error);
+            resultElement.textContent = "오류가 발생했습니다. 다시 시도해주세요.";
+        } finally {
+            askBtn.disabled = false;
+            askBtn.textContent = "질문하기";
+        }
+    }
+</script>
+
 </body>
 </html>
