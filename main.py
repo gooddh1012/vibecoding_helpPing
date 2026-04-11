@@ -2,7 +2,13 @@ import sys
 import json
 import os
 import io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
+# stdout UTF-8 설정
+sys.stdout = io.TextIOWrapper(
+    sys.stdout.buffer,
+    encoding='utf-8'
+)
+
 import pdfplumber
 
 from dotenv import load_dotenv
@@ -10,8 +16,16 @@ from openai import OpenAI
 
 from pymongo import MongoClient
 from datetime import datetime
-import sys
-print("현재 Python 경로:", sys.executable)
+
+###################################
+# 로그 함수 (stderr)
+###################################
+
+def log(*args):
+    print(*args, file=sys.stderr, flush=True)
+
+log("현재 Python 경로:", sys.executable)
+
 ###################################
 # ENV 로드
 ###################################
@@ -39,17 +53,15 @@ mongo_db = mongo_client[
 ]
 
 mongo_collection = mongo_db[
-    os.getenv("MONGO_COLLECTION") 
+    os.getenv("MONGO_COLLECTION")
 ]
 
-
 ###################################
-# index 생성
+# index (email 기준 검색 최적화)
 ###################################
 
 mongo_collection.create_index(
-    [("topic", 1), ("week", 1)],
-    unique=True
+    [("email", 1), ("topics", 1)]
 )
 
 ###################################
@@ -72,7 +84,7 @@ def load_prompt(name):
 
 def read_pdf(path):
 
-    print("PDF 읽는 중...", flush=True)
+    log("PDF 읽는 중...")
 
     text = ""
 
@@ -89,36 +101,12 @@ def read_pdf(path):
     return text
 
 ###################################
-# chunk 분리
-###################################
-
-def split_text(text, max_length=8000):
-
-    print("텍스트 분할 중...", flush=True)
-
-    chunks = []
-
-    start = 0
-
-    while start < len(text):
-
-        end = start + max_length
-
-        chunks.append(
-            text[start:end]
-        )
-
-        start = end
-
-    print(f"총 chunk 수: {len(chunks)}", flush=True)
-
-    return chunks
-
-###################################
 # GPT 실행
 ###################################
 
 def run_gpt(prompt):
+
+    log("GPT 실행 중...")
 
     response = client.chat.completions.create(
 
@@ -137,126 +125,263 @@ def run_gpt(prompt):
 
     )
 
-    return response.choices[0].message.content
+    result = response.choices[0].message.content
+
+    log("GPT 결과:", result)
+
+    return result
 
 ###################################
-# 저장
+# topic 정리
 ###################################
 
-def save_topics(topics):
+def clean_topics(raw_topics):
 
-    for t in topics:
+    clean = []
 
-        print(
-            f"저장 중: {t['topic']} (week {t['week']})",
-            flush=True
-        )
+    for t in raw_topics:
 
-        mongo_collection.update_one(
+        if isinstance(t, dict):
 
-            {
-                "topic": t["topic"],
-                "week": t["week"]
-            },
+            topic_name = t.get("topic")
 
-            {
-                "$set": {
-                    
-                    "topic": t["topic"],
+            if topic_name:
+                clean.append(topic_name)
 
-                    "content": t["content"],
+        elif isinstance(t, str):
 
-                    "week": t["week"],
+            if t.strip():
+                clean.append(t.strip())
 
-                    "date":
-                    datetime.now()
-                    .strftime("%Y-%m-%d")
-
-                }
-            },
-
-            upsert=True
-
-        )
+    return clean
 
 ###################################
-# upload
+# upload 처리 (email 저장)
 ###################################
 
-def process_upload(file_path):
-    # PDF 전체 텍스트 읽기
+def process_upload(file_path, email):
+
     text = read_pdf(file_path)
 
-    # PDF 전체 내용을 그대로 저장할 week와 topics 추출
-    # 예시: GPT로 주제만 뽑기
-    template = load_prompt("text_prompt.txt")
-    prompt = template.replace("{{TEXT}}", text)
-    
-    result = run_gpt(prompt)
-    parsed = json.loads(result)
+    if not text.strip():
 
-    topics = parsed["topics"]  # ["프로시저", "사용자 정의 함수", ...]
+        raise Exception(
+            "PDF 텍스트 없음"
+        )
 
-    # MongoDB에 전체 PDF 저장
-    mongo_collection.update_one(
-        {"file_name": os.path.basename(file_path)},
-        {"$set": {
-            "week": 13,                  # 예시로 week 13
-            "topics": [t["topic"] for t in topics],
-            "content": text,             # PDF 전체 내용 통째로
-            "date": datetime.now().strftime("%Y-%m-%d")
-        }},
-        upsert=True
+    template = load_prompt(
+        "text_prompt.txt"
     )
 
-    print("전체 PDF와 topics 저장 완료", flush=True)
+    prompt = template.replace(
+        "{{TEXT}}",
+        text
+    )
+
+    result = run_gpt(prompt)
+
+    ###################################
+    # JSON 파싱
+    ###################################
+
+    try:
+
+        parsed = json.loads(result)
+
+    except Exception:
+
+        log("JSON 파싱 실패:", result)
+
+        raise Exception(
+            "GPT JSON 파싱 실패"
+        )
+
+    ###################################
+    # topics 추출
+    ###################################
+
+    raw_topics = parsed.get(
+        "topics",
+        []
+    )
+
+    topics = clean_topics(
+        raw_topics
+    )
+
+    log("정리된 topics:", topics)
+
+    ###################################
+    # MongoDB 저장
+    ###################################
+
+    mongo_collection.insert_one({
+
+        "email": email,
+
+        "file_name":
+        os.path.basename(
+            file_path
+        ),
+
+        "topics": topics,
+
+        "content": text,
+
+        "date":
+        datetime.now()
+        .strftime("%Y-%m-%d")
+
+    })
+
+    log("전체 PDF와 topics 저장 완료")
+
     return topics
 
 ###################################
-# question
+# 질문 처리 (email 기준 검색)
 ###################################
 
-def process_question(question):
-    keyword = question.split()[0]  # 예: "프로시저"
+def process_question(question, email):
 
-    # MongoDB에서 topics 배열 안 검색
-    found = mongo_collection.find_one({
-        "topics": {
-            "$elemMatch": {"$regex": keyword, "$options": "i"}
+    ###################################
+    # 1단계: 해당 email의 모든 자료 가져오기
+    ###################################
+
+    docs = list(mongo_collection.find({
+        "email": email
+    }))
+
+    if not docs:
+
+        return {
+            "answer":
+            "업로드된 학습 자료가 없습니다."
         }
+
+    ###################################
+    # 2단계: 모든 topic 모으기
+    ###################################
+
+    all_topics = []
+
+    for doc in docs:
+
+        for t in doc.get("topics", []):
+
+            all_topics.append(t)
+
+    ###################################
+    # 3단계: GPT로 topic 선택
+    ###################################
+
+    topic_prompt = f"""
+다음은 학습 주제 목록이다.
+
+{all_topics}
+
+사용자 질문:
+{question}
+
+이 질문과 가장 관련 있는 topic 하나만 정확히 선택해서 출력하라.
+몇 주차에 배웠는지도 말하여라
+반드시 JSON 형식으로 출력하라.
+출력 형식:
+{{
+  "topic": "선택된 topic"
+}}
+"""
+
+    topic_response = client.chat.completions.create(
+
+        model="gpt-4.1",
+
+        messages=[
+            {
+                "role": "user",
+                "content": topic_prompt
+            }
+        ],
+
+        response_format={
+            "type": "json_object"
+        }
+
+    )
+
+    topic_json = json.loads(
+        topic_response.choices[0]
+        .message.content
+    )
+
+    selected_topic = topic_json.get(
+        "topic"
+    )
+
+    log("선택된 topic:", selected_topic)
+
+    ###################################
+    # 4단계: 해당 topic 문서 찾기
+    ###################################
+
+    found = mongo_collection.find_one({
+
+        "email": email,
+
+        "topics": selected_topic
+
     })
 
     if not found:
-        return {"answer": "관련 내용을 찾지 못했습니다."}
+
+        return {
+            "answer":
+            "관련 내용을 찾지 못했습니다."
+        }
+
+    ###################################
+    # 5단계: GPT로 최종 답변 생성
+    ###################################
 
     context = f"""
-        주제: {', '.join(found['topics'])}
-        내용: {found['content']}
-        주차: {found['week']}
-        """
+주제: {', '.join(found['topics'])}
 
-    prompt = f"""
-        다음 학습 정보를 참고하여 질문에 자연스럽게 답하라.
+내용:
+{found['content']}
+"""
 
-        정보:
-        {context}
+    answer_prompt = f"""
+다음 학습 정보를 참고하여 질문에 답하라.
+질문한 것 만 말하여라 또한
+몇 주차에 배웠는지도 말하여라
 
-        질문:
-        {question}
+정보:
+{context}
 
-        답변은 사람이 말하듯 자연스럽게 작성하라.
-        또한 주차가 없으면 없다고 말하고 추측은 하지 않고 정보에 기반한 사실만을 토대로 말을 해
-        없는 내용이면 굳이 대답을 하지 않아도 괜찮아
-        """
+질문:
+{question}
+반드시 정보 안에서만 답하라.
+"""
 
     response = client.chat.completions.create(
+
         model="gpt-4.1",
-        messages=[{"role": "user", "content": prompt}]
+
+        messages=[
+            {
+                "role": "user",
+                "content": answer_prompt
+            }
+        ]
+
     )
 
-    answer = response.choices[0].message.content
+    answer = response.choices[0] \
+        .message.content
 
-    return {"answer": answer}
+    return {
+        "answer": answer
+    }
 
 ###################################
 # MAIN
@@ -266,34 +391,51 @@ try:
 
     mode = sys.argv[1]
 
+    ###################################
+    # upload
+    ###################################
+
     if mode == "upload":
 
         file_path = sys.argv[2]
 
+        email = sys.argv[3]
+
         topics = process_upload(
-            file_path
+            file_path,
+            email
         )
 
         print(json.dumps({
+
             "topics": topics
-        }))
+
+        }, ensure_ascii=False))
+
+    ###################################
+    # question
+    ###################################
 
     elif mode == "question":
 
         question = sys.argv[2]
 
+        email = sys.argv[3]
+
         result = process_question(
-            question
+            question,
+            email
         )
 
-        print(json.dumps(result, ensure_ascii=False))
-
-    elif mode == "summary":
-
-        result = process_summary()
-
-        print(result)
+        print(json.dumps(
+            result,
+            ensure_ascii=False
+        ))
 
 except Exception as e:
 
-    print("ERROR:", str(e), flush=True)
+    log("ERROR:", str(e))
+
+    print(json.dumps({
+        "error": str(e)
+    }))
