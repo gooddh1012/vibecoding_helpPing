@@ -14,6 +14,7 @@ app.use(express.json());
 /////////////////////////////////
 // 정적 파일
 /////////////////////////////////
+
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/public/login.html");
 });
@@ -23,36 +24,61 @@ app.use(express.static("public"));
 /////////////////////////////////
 // MongoDB 연결
 /////////////////////////////////
-mongoose.connect(process.env.MONGO_URI + process.env.MONGO_DB)
-  .then(() => console.log("MongoDB 연결 성공"))
-  .catch(err => console.error("❌ MongoDB 연결 실패:", err));
+
+mongoose.connect(
+  process.env.MONGO_URI +
+  process.env.MONGO_DB
+)
+.then(() =>
+  console.log("MongoDB 연결 성공")
+)
+.catch(err =>
+  console.error("MongoDB 연결 실패:", err)
+);
 
 /////////////////////////////////
-// User 스키마 (회원가입용)
+// User 스키마
 /////////////////////////////////
+
 const userSchema = new mongoose.Schema({
+
   email: {
     type: String,
     required: true,
     unique: true
   },
+
   password: {
     type: String,
     required: true
   },
+
   name: String,
+
   studentId: String
+
 });
 
-const User = mongoose.model("User", userSchema);
+const User = mongoose.model(
+  "User",
+  userSchema
+);
 
 /////////////////////////////////
 // Multer 설정
 /////////////////////////////////
+
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
+
+  destination: (req, file, cb) =>
+    cb(null, "uploads/"),
+
   filename: (req, file, cb) =>
-    cb(null, Date.now() + "-" + file.originalname)
+    cb(
+      null,
+      Date.now() + "-" + file.originalname
+    )
+
 });
 
 const upload = multer({ storage });
@@ -60,20 +86,28 @@ const upload = multer({ storage });
 /////////////////////////////////
 // 상태 확인
 /////////////////////////////////
+
 app.get("/status", (req, res) => {
+
   res.json({
+
     message: "API 정상 작동 중",
+
     time: new Date().toISOString(),
+
     mongodb:
       mongoose.connection.readyState === 1
         ? "connected"
         : "disconnected"
+
   });
+
 });
 
 /////////////////////////////////
 // Python 실행 함수
 /////////////////////////////////
+
 function runPython(args, res) {
 
   const python = spawn("python", args);
@@ -81,26 +115,40 @@ function runPython(args, res) {
   let result = "";
 
   python.stdout.on("data", data => {
+
     result += data.toString("utf8");
+
   });
 
   python.stderr.on("data", data => {
-    console.error("Python stderr:", data.toString());
+
+    console.error(
+      "Python stderr:",
+      data.toString()
+    );
+
   });
 
   python.on("close", () => {
 
     try {
 
-      const jsonStart = result.indexOf("{");
+      const jsonStart =
+        result.indexOf("{");
 
       if (jsonStart === -1) {
-        throw new Error("JSON 없음");
+
+        throw new Error(
+          "JSON 없음"
+        );
+
       }
 
-      const jsonString = result.slice(jsonStart);
+      const jsonString =
+        result.slice(jsonStart);
 
-      const parsed = JSON.parse(jsonString);
+      const parsed =
+        JSON.parse(jsonString);
 
       res.setHeader(
         "Content-Type",
@@ -111,12 +159,19 @@ function runPython(args, res) {
 
     } catch (err) {
 
-      console.error("JSON 파싱 실패:");
+      console.error(
+        "JSON 파싱 실패:"
+      );
+
       console.error(result);
 
       res.status(500).json({
-        error: "Python output parse 실패",
+
+        error:
+          "Python output parse 실패",
+
         raw: result
+
       });
 
     }
@@ -126,8 +181,9 @@ function runPython(args, res) {
 }
 
 /////////////////////////////////
-// 회원가입 (MongoDB 저장)
+// 회원가입
 /////////////////////////////////
+
 app.post("/signup", async (req, res) => {
 
   try {
@@ -139,39 +195,56 @@ app.post("/signup", async (req, res) => {
       studentId
     } = req.body;
 
-    // 이메일 중복 확인
-    const exists = await User.findOne({ email });
+    const exists =
+      await User.findOne({
+        email
+      });
 
     if (exists) {
 
       return res.json({
+
         success: false,
-        message: "이미 존재하는 이메일입니다."
+
+        message:
+          "이미 존재하는 이메일입니다."
+
       });
 
     }
 
-    // 비밀번호 길이 최소 체크 (선택)
     if (password.length < 8) {
 
       return res.json({
+
         success: false,
-        message: "비밀번호는 8자 이상 입력하세요."
+
+        message:
+          "비밀번호는 8자 이상 입력하세요."
+
       });
 
     }
 
-    // 새 유저 생성
-    const newUser = new User({
-      email,
-      password,
-      name,
-      studentId
-    });
+    const newUser =
+      new User({
+
+        email,
+
+        password,
+
+        name,
+
+        studentId
+
+      });
 
     await newUser.save();
 
-    console.log("회원가입 완료:", email);
+    console.log(
+      "회원가입 완료:",
+      email
+    );
 
     res.json({
       success: true
@@ -182,8 +255,12 @@ app.post("/signup", async (req, res) => {
     console.error(err);
 
     res.status(500).json({
+
       success: false,
-      message: "회원가입 중 오류 발생"
+
+      message:
+        "회원가입 중 오류 발생"
+
     });
 
   }
@@ -191,61 +268,181 @@ app.post("/signup", async (req, res) => {
 });
 
 /////////////////////////////////
-// 파일 업로드
+// 로그인 (email 반환)
 /////////////////////////////////
-app.post("/upload",
+
+app.post("/login", async (req, res) => {
+
+  try {
+
+    const {
+      email,
+      password
+    } = req.body;
+
+    const user =
+      await User.findOne({
+        email
+      });
+
+    if (!user) {
+
+      return res.json({
+
+        success: false,
+
+        message:
+          "아이디가 존재하지 않습니다"
+
+      });
+
+    }
+
+    if (
+      user.password !== password
+    ) {
+
+      return res.json({
+
+        success: false,
+
+        message:
+          "비밀번호가 일치하지 않습니다"
+
+      });
+
+    }
+
+    res.json({
+
+      success: true,
+
+      email: email
+
+    });
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+
+      success: false,
+
+      message:
+        "로그인 중 오류 발생"
+
+    });
+
+  }
+
+});
+
+/////////////////////////////////
+// 파일 업로드 (email 전달)
+/////////////////////////////////
+
+app.post(
+  "/upload",
+
   upload.single("pdf"),
+
   (req, res) => {
 
-    console.log("업로드 파일:", req.file.path);
+    const email =
+      req.body.email;
+
+    console.log(
+      "업로드 파일:",
+      req.file.path
+    );
+
+    console.log(
+      "받은 email:",
+      email
+    );
+
+    // email 체크 (중요)
+    if (!email) {
+
+      return res.status(400).json({
+
+        error:
+          "email 값이 없습니다"
+
+      });
+
+    }
 
     runPython(
-      ["main.py", "upload", req.file.path],
+
+      [
+        "main.py",
+        "upload",
+        req.file.path,
+        email
+      ],
+
       res
+
     );
 
   }
+
 );
 
 /////////////////////////////////
-// 질문
+// 질문 (email 전달)
 /////////////////////////////////
-app.post("/question", (req, res) => {
 
-  runPython(
-    ["main.py", "question", req.body.question],
-    res
-  );
+app.post(
+  "/question",
 
-});
-app.post("/login",async(req,res)=>{
-  try{
-    const{email,password} = req.body;
-    const user = await User.findOne({email});
+  (req, res) => {
 
-    if(!user){
-      return res.json({success : false,message:"아이디가 존재하지 않습니다"});
+    const email =
+      req.body.email;
+
+    const question =
+      req.body.question;
+
+    console.log(
+      "question email:",
+      email
+    );
+
+    if (!email) {
+
+      return res.status(400).json({
+
+        error:
+          "email 값이 없습니다"
+
+      });
+
     }
-    if(user.password !== password){
-      return res.json({success : false,message:"비밀번호가 존재하지 않습니다"})
-    }
-    res.json({
-      success: true
-    });
 
-  } catch (err) {
+    runPython(
 
-    console.error(err);
+      [
+        "main.py",
+        "question",
+        question,
+        email
+      ],
 
-    res.status(500).json({
-      success: false,
-      message: "로그인 중 오류 발생"
-    });
+      res
+
+    );
+
   }
-});
+
+);
+
 /////////////////////////////////
 // 서버 실행
 /////////////////////////////////
+
 app.listen(PORT, () => {
 
   console.log(

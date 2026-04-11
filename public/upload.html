@@ -144,42 +144,114 @@
     <div id="status">파일 분석 중... 잠시만 기다려 주세요.</div>
 </div>
 
-<script>
-    document.getElementById("uploadForm").onsubmit = async (e) => {
+    <script>
+
+    document
+    .getElementById("uploadForm")
+    .onsubmit = async (e) => {
+
         e.preventDefault();
-        
-        const statusText = document.getElementById("status");
-        const submitBtn = e.target.querySelector(".submit-btn");
 
-        // UI 피드백
+        const statusText =
+            document.getElementById("status");
+
+        const submitBtn =
+            e.target.querySelector("button");
+
         statusText.style.display = "block";
-        submitBtn.disabled = true;
-        submitBtn.innerText = "업로드 중...";
-        submitBtn.style.backgroundColor = "#ccc";
 
-        const formData = new FormData(e.target);
-        
+        submitBtn.disabled = true;
+
+        /////////////////////////////////////
+        // 🔥 email 가져오기
+        /////////////////////////////////////
+
+        const email =
+            localStorage.getItem("email");
+
+        console.log(
+            "현재 email:",
+            email
+        );
+
+        if (!email) {
+
+            alert(
+                "로그인 정보가 없습니다. 다시 로그인하세요."
+            );
+
+            window.location.href = "/";
+
+            return;
+
+        }
+
+        /////////////////////////////////////
+        // FormData 생성
+        /////////////////////////////////////
+
+        const formData =
+            new FormData(e.target);
+
+        // 🔥 핵심 추가
+        formData.append(
+            "email",
+            email
+        );
+
         try {
-            const res = await fetch("/upload", {
-                method: "POST",
-                body: formData
-            });
+
+            const res =
+                await fetch("/upload", {
+
+                    method: "POST",
+
+                    body: formData
+
+                });
+
+            const result =
+                await res.json();
+
+            console.log(result);
 
             if (res.ok) {
-                alert("성공적으로 업로드되었습니다!");
+
+                alert(
+                    "성공적으로 업로드되었습니다!"
+                );
+
             } else {
-                alert("업로드에 실패했습니다.");
+
+                alert(
+                    "업로드 실패"
+                );
+
             }
-        } catch (error) {
-            alert("서버 연결 오류가 발생했습니다.");
-        } finally {
-            statusText.style.display = "none";
-            submitBtn.disabled = false;
-            submitBtn.innerText = "업로드 시작";
-            submitBtn.style.backgroundColor = "#5b86e5";
+
         }
-    }
-</script>
+
+        catch (error) {
+
+            console.error(error);
+
+            alert(
+                "서버 연결 오류"
+            );
+
+        }
+
+        finally {
+
+            statusText.style.display = "none";
+
+            submitBtn.disabled = false;
+
+        }
+
+    };
+
+    </script>
 
 </body>
 </html>
