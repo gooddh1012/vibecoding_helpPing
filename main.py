@@ -3,7 +3,6 @@ import json
 import os
 import io
 
-# stdout UTF-8 설정
 sys.stdout = io.TextIOWrapper(
     sys.stdout.buffer,
     encoding='utf-8'
@@ -17,32 +16,16 @@ from openai import OpenAI
 from pymongo import MongoClient
 from datetime import datetime
 
-###################################
-# 로그 함수 (stderr)
-###################################
-
 def log(*args):
     print(*args, file=sys.stderr, flush=True)
 
 log("현재 Python 경로:", sys.executable)
 
-###################################
-# ENV 로드
-###################################
-
 load_dotenv()
-
-###################################
-# OpenAI
-###################################
 
 client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY")
 )
-
-###################################
-# MongoDB 연결
-###################################
 
 mongo_client = MongoClient(
     os.getenv("MONGO_URI")
@@ -56,17 +39,9 @@ mongo_collection = mongo_db[
     os.getenv("MONGO_COLLECTION")
 ]
 
-###################################
-# index (email 기준 검색 최적화)
-###################################
-
 mongo_collection.create_index(
     [("email", 1), ("topics", 1)]
 )
-
-###################################
-# prompt 읽기
-###################################
 
 def load_prompt(name):
 
@@ -77,10 +52,6 @@ def load_prompt(name):
     ) as f:
 
         return f.read()
-
-###################################
-# PDF 읽기
-###################################
 
 def read_pdf(path):
 
@@ -100,9 +71,6 @@ def read_pdf(path):
 
     return text
 
-###################################
-# GPT 실행
-###################################
 
 def run_gpt(prompt):
 
@@ -131,9 +99,6 @@ def run_gpt(prompt):
 
     return result
 
-###################################
-# topic 정리
-###################################
 
 def clean_topics(raw_topics):
 
@@ -155,9 +120,6 @@ def clean_topics(raw_topics):
 
     return clean
 
-###################################
-# upload 처리 (email 저장)
-###################################
 
 def process_upload(file_path, email):
 
@@ -180,10 +142,6 @@ def process_upload(file_path, email):
 
     result = run_gpt(prompt)
 
-    ###################################
-    # JSON 파싱
-    ###################################
-
     try:
 
         parsed = json.loads(result)
@@ -196,10 +154,6 @@ def process_upload(file_path, email):
             "GPT JSON 파싱 실패"
         )
 
-    ###################################
-    # topics 추출
-    ###################################
-
     raw_topics = parsed.get(
         "topics",
         []
@@ -211,9 +165,6 @@ def process_upload(file_path, email):
 
     log("정리된 topics:", topics)
 
-    ###################################
-    # MongoDB 저장
-    ###################################
 
     mongo_collection.insert_one({
 
@@ -238,15 +189,7 @@ def process_upload(file_path, email):
 
     return topics
 
-###################################
-# 질문 처리 (email 기준 검색)
-###################################
-
 def process_question(question, email):
-
-    ###################################
-    # 1단계: 해당 email의 모든 자료 가져오기
-    ###################################
 
     docs = list(mongo_collection.find({
         "email": email
@@ -259,10 +202,6 @@ def process_question(question, email):
             "업로드된 학습 자료가 없습니다."
         }
 
-    ###################################
-    # 2단계: 모든 topic 모으기
-    ###################################
-
     all_topics = []
 
     for doc in docs:
@@ -271,26 +210,28 @@ def process_question(question, email):
 
             all_topics.append(t)
 
-    ###################################
-    # 3단계: GPT로 topic 선택
-    ###################################
-
     topic_prompt = f"""
-다음은 학습 주제 목록이다.
+    다음은 학습 주제 목록이다.
 
-{all_topics}
+    {all_topics}
+    
+    사용자 질문:
+    {question}
 
-사용자 질문:
-{question}
+    지시 사항:
 
-이 질문과 가장 관련 있는 topic 하나만 정확히 선택해서 출력하라.
-몇 주차에 배웠는지도 말하여라
-반드시 JSON 형식으로 출력하라.
-출력 형식:
-{{
-  "topic": "선택된 topic"
-}}
-"""
+    - 질문과 가장 관련 있는 topic 하나만 정확히 선택하라.
+    - 몇 주차에 배웠는지도 말하여라.
+    - 해당 topic이 몇 주차인지 함께 포함하라.
+    - 반드시 JSON 형식으로만 출력하라.
+    - JSON 외 다른 텍스트는 절대 출력하지 마라.
+
+    출력 형식:
+
+    {{
+        "topic": "선택된 topic",
+    }}
+    """
 
     topic_response = client.chat.completions.create(
 
@@ -320,10 +261,6 @@ def process_question(question, email):
 
     log("선택된 topic:", selected_topic)
 
-    ###################################
-    # 4단계: 해당 topic 문서 찾기
-    ###################################
-
     found = mongo_collection.find_one({
 
         "email": email,
@@ -339,29 +276,30 @@ def process_question(question, email):
             "관련 내용을 찾지 못했습니다."
         }
 
-    ###################################
-    # 5단계: GPT로 최종 답변 생성
-    ###################################
-
     context = f"""
-주제: {', '.join(found['topics'])}
+    주제: {', '.join(found['topics'])}
 
-내용:
-{found['content']}
-"""
-
+    내용:
+    {found['content']}
+    """
+    
     answer_prompt = f"""
-다음 학습 정보를 참고하여 질문에 답하라.
-질문한 것 만 말하여라 또한
-몇 주차에 배웠는지도 말하여라
+    다음 학습 정보를 참고하여 질문에 답하라.
 
-정보:
-{context}
+    [정보]
+    {context}
 
-질문:
-{question}
-반드시 정보 안에서만 답하라.
-"""
+    [질문]
+    {question}
+
+    답변 규칙:
+
+    - 질문에서 묻는 내용만 간결하게 답하라.
+    - 해당 내용이 몇 주차에 학습되었는지도 함께 말하라.
+    - 반드시 위 정보에 포함된 내용만 사용하라.
+    - 정보에 없는 내용은 추가하지 마라.
+    - 추측하거나 확장하지 마라.
+    """
 
     response = client.chat.completions.create(
 
@@ -383,17 +321,9 @@ def process_question(question, email):
         "answer": answer
     }
 
-###################################
-# MAIN
-###################################
-
 try:
 
     mode = sys.argv[1]
-
-    ###################################
-    # upload
-    ###################################
 
     if mode == "upload":
 
@@ -411,10 +341,6 @@ try:
             "topics": topics
 
         }, ensure_ascii=False))
-
-    ###################################
-    # question
-    ###################################
 
     elif mode == "question":
 
