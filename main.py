@@ -3,7 +3,6 @@ import json
 import os
 import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-import pdfplumber
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -12,23 +11,14 @@ from pymongo import MongoClient
 from datetime import datetime
 import sys
 print("현재 Python 경로:", sys.executable)
-###################################
-# ENV 로드
-###################################
+
+import pdfplumber
 
 load_dotenv()
-
-###################################
-# OpenAI
-###################################
 
 client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY")
 )
-
-###################################
-# MongoDB 연결
-###################################
 
 mongo_client = MongoClient(
     os.getenv("MONGO_URI")
@@ -42,19 +32,10 @@ mongo_collection = mongo_db[
     os.getenv("MONGO_COLLECTION") 
 ]
 
-
-###################################
-# index 생성
-###################################
-
 mongo_collection.create_index(
     [("topic", 1), ("week", 1)],
     unique=True
 )
-
-###################################
-# prompt 읽기
-###################################
 
 def load_prompt(name):
 
@@ -65,10 +46,6 @@ def load_prompt(name):
     ) as f:
 
         return f.read()
-
-###################################
-# PDF 읽기
-###################################
 
 def read_pdf(path):
 
@@ -87,10 +64,6 @@ def read_pdf(path):
                 text += page_text + "\n"
 
     return text
-
-###################################
-# chunk 분리
-###################################
 
 def split_text(text, max_length=8000):
 
@@ -114,10 +87,6 @@ def split_text(text, max_length=8000):
 
     return chunks
 
-###################################
-# GPT 실행
-###################################
-
 def run_gpt(prompt):
 
     response = client.chat.completions.create(
@@ -138,10 +107,6 @@ def run_gpt(prompt):
     )
 
     return response.choices[0].message.content
-
-###################################
-# 저장
-###################################
 
 def save_topics(topics):
 
@@ -179,31 +144,23 @@ def save_topics(topics):
 
         )
 
-###################################
-# upload
-###################################
-
 def process_upload(file_path):
-    # PDF 전체 텍스트 읽기
     text = read_pdf(file_path)
 
-    # PDF 전체 내용을 그대로 저장할 week와 topics 추출
-    # 예시: GPT로 주제만 뽑기
     template = load_prompt("text_prompt.txt")
     prompt = template.replace("{{TEXT}}", text)
     
     result = run_gpt(prompt)
     parsed = json.loads(result)
 
-    topics = parsed["topics"]  # ["프로시저", "사용자 정의 함수", ...]
+    topics = parsed["topics"] 
 
-    # MongoDB에 전체 PDF 저장
     mongo_collection.update_one(
         {"file_name": os.path.basename(file_path)},
         {"$set": {
-            "week": 13,                  # 예시로 week 13
+            "week": 13,                
             "topics": [t["topic"] for t in topics],
-            "content": text,             # PDF 전체 내용 통째로
+            "content": text,             
             "date": datetime.now().strftime("%Y-%m-%d")
         }},
         upsert=True
@@ -212,14 +169,9 @@ def process_upload(file_path):
     print("전체 PDF와 topics 저장 완료", flush=True)
     return topics
 
-###################################
-# question
-###################################
-
 def process_question(question):
-    keyword = question.split()[0]  # 예: "프로시저"
+    keyword = question.split()[0] 
 
-    # MongoDB에서 topics 배열 안 검색
     found = mongo_collection.find_one({
         "topics": {
             "$elemMatch": {"$regex": keyword, "$options": "i"}
@@ -230,25 +182,31 @@ def process_question(question):
         return {"answer": "관련 내용을 찾지 못했습니다."}
 
     context = f"""
-        주제: {', '.join(found['topics'])}
-        내용: {found['content']}
-        주차: {found['week']}
-        """
+    주제: {', '.join(found['topics'])}
+    내용: {found['content']}
+    주차: {found['week']}
+    """
 
     prompt = f"""
-        다음 학습 정보를 참고하여 질문에 자연스럽게 답하라.
+    다음 학습 정보를 기반으로 질문에 답하라.
 
-        정보:
-        {context}
+    정보:
+    {context}
 
-        질문:
-        {question}
+    질문:
+    {question}
 
-        답변은 사람이 말하듯 자연스럽게 작성하라.
-        또한 주차가 없으면 없다고 말하고 추측은 하지 않고 정보에 기반한 사실만을 토대로 말을 해
-        없는 내용이면 굳이 대답을 하지 않아도 괜찮아
-        """
+    [답변 규칙]
 
+    - 반드시 위에 제공된 정보만을 근거로 답하라.
+    - 정보에 없는 내용은 절대 추가하지 마라.
+    - 추측, 일반 상식 보완, 외부 지식 사용을 금지한다.
+    - 주차 정보가 제공되지 않았다면 "주차 정보는 제공되지 않았다"고만 말하라.
+    - 질문이 제공 정보와 관련이 없다면 답변하지 말고 "제공된 정보로는 답할 수 없다"고 말하라.
+    - 내용을 과장하거나 확장하지 말고, 정보 범위 내에서만 설명하라.
+    - 사람에게 설명하듯 자연스럽게 작성하되, 사실만 전달하라.
+    """
+    
     response = client.chat.completions.create(
         model="gpt-4.1",
         messages=[{"role": "user", "content": prompt}]
@@ -257,10 +215,6 @@ def process_question(question):
     answer = response.choices[0].message.content
 
     return {"answer": answer}
-
-###################################
-# MAIN
-###################################
 
 try:
 
