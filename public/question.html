@@ -174,40 +174,111 @@
     </div>
 </div>
 
-<script>
+    <script>
     async function ask() {
-        const questionInput = document.getElementById("question");
-        const resultElement = document.getElementById("result");
-        const askBtn = document.querySelector(".ask-btn");
-
+    
+        const questionInput =
+            document.getElementById("question");
+    
+        const resultElement =
+            document.getElementById("result");
+    
+        const askBtn =
+            document.querySelector(".ask-btn");
+    
         if (!questionInput.value.trim()) {
+        
             alert("질문을 입력해주세요.");
+        
             return;
+        
         }
-
-        resultElement.textContent = "답변을 생성 중입니다...";
+    
+        /////////////////////////////////////
+        // 🔥 email 가져오기 (추가)
+        /////////////////////////////////////
+    
+        const email =
+            localStorage.getItem("email");
+    
+        console.log(
+            "현재 email:",
+            email
+        );
+    
+        if (!email) {
+        
+            alert(
+                "로그인 정보가 없습니다. 다시 로그인하세요."
+            );
+        
+            window.location.href = "/";
+        
+            return;
+        
+        }
+    
+        resultElement.textContent =
+            "답변을 생성 중입니다...";
+    
         askBtn.disabled = true;
-        askBtn.textContent = "확인 중";
-
+    
+        askBtn.textContent =
+            "확인 중";
+    
         try {
-            const res = await fetch("/question", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ question: questionInput.value })
-            });
+        
+            const res =
+                await fetch("/question", {
+                
+                    method: "POST",
+                
+                    headers: {
+                        "Content-Type":
+                        "application/json"
+                    },
+                
+                    // 🔥 핵심 수정
+                    body: JSON.stringify({
+                    
+                        question:
+                            questionInput.value,
+                    
+                        email:
+                            email
+                    
+                    })
+                
+                });
             
-            const data = await res.json();
+            const data =
+                await res.json();
             
-            resultElement.textContent = data.answer || "답변을 가져오지 못했습니다.";
-        } catch (error) {
-            console.error(error);
-            resultElement.textContent = "오류가 발생했습니다. 다시 시도해주세요.";
-        } finally {
-            askBtn.disabled = false;
-            askBtn.textContent = "질문하기";
+            resultElement.textContent =
+                data.answer
+                || "답변을 가져오지 못했습니다.";
+            
         }
+    
+        catch (error) {
+        
+            console.error(error);
+        
+            resultElement.textContent =
+                "오류가 발생했습니다.";
+        
+        }
+    
+        finally {
+        
+            askBtn.disabled = false;
+        
+            askBtn.textContent =
+                "질문하기";
+        
+        }
+    
     }
-</script>
-
+    </script>
 </body>
 </html>
